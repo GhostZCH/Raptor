@@ -1,6 +1,6 @@
- 
+
 # Reptor
-A HTTP proxy engine write by c++
+A HTTP proxy engine written by c++
 ## Requirement
 + run only on linux
 + run only with epoll
