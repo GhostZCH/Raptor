@@ -1,3 +1,3 @@
 CONF = {
-    'worker-count': 2
+    'worker-count': 1
 }

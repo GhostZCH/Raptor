@@ -1,8 +1,8 @@
-import time
+import signal
+from event_server import Event, EventServer
 
-from select import epoll, EPOLLET, EPOLLIN, EPOLLOUT
-
-_TEST_DATA = "HTTP/1.0 200 OK\r\nContent-type :text/plain\r\nContent-length: 100\r\n\r\n" + '0' * 100
+from host_handler import HostHandler
+from signal_handler import SignalHandler
 
 
 class Worker:
@@ -10,15 +10,30 @@ class Worker:
         self._id = worker_id
         self._conf = conf
         self._host = host
-        self._epoll = epoll()
+        self._event_server = None
+        self._go = True
+
+    def stop(self):
+        print 'worker %d stop on sig' % self._id
+        self._go = False
 
     def start(self):
-        self._epoll.register(self._host, EPOLLIN | EPOLLOUT)
-        while True:
-            for fd, event in self._epoll.poll(1, 1024):
-                if fd == self._host.fileno():
-                    client = self._host.accept()[0]
-                    print self._id, 'attept', client.fileno()
-                    client.recv(1024)
-                    client.send(_TEST_DATA)
-                    client.close()
+        self._event_server = EventServer(1)
+
+        sigint_event = Event(SignalHandler(signal.SIGINT, self.stop, self._event_server))
+        sigint_event.sig = True
+        self._event_server.add_handler(sigint_event)
+
+        host_event = Event(HostHandler(self._host, self._conf, self._event_server))
+        host_event.read = True
+        host_event.write = True
+        host_event.et = False
+        host_event.hup = True
+        self._event_server.add_handler(host_event)
+
+        while self._go:
+            print 'worker', self._id, 'run'
+            for event in self._event_server.poll():
+                event.handler.handle(event)
+
+        print 'worker %d exit' % self._id
