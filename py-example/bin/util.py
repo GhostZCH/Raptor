@@ -1,4 +1,5 @@
 import socket
+import errno
 
 
 class ClientCloseConnection(Exception):
@@ -23,11 +24,11 @@ def read(conn):
             if tmp:
                 buf += tmp
             else:
-                raise ClientCloseConnection()
+                return buf, ClientCloseConnection()
     except socket.error as ex:
-        if not ex.errno == 11:
-            raise ex
-    return buf
+        if ex.errno != errno.EAGAIN:
+            return buf, ex
+    return buf, None
 
 
 def write(conn, buf):

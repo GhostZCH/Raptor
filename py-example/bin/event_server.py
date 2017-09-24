@@ -2,7 +2,7 @@ import time
 import traceback
 from events import TimerEventManager, NetEventManager
 
-from handlers import ServerHandler
+from server_handler import ServerHandler
 
 
 class EventServer:
@@ -39,6 +39,9 @@ class EventServer:
     def remove_handler(self, fd):
         self._net_manager.remove(fd)
         return self._handlers.pop(fd, None)
+
+    def get_handler(self, fd):
+        return self._handlers.get(fd, None)
 
     def add_timer(self, timer_event):
         self._timer_manager.add(timer_event)
