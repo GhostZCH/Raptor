@@ -3,13 +3,12 @@
 A HTTP proxy engine written in c++
 
 ## Requirement
++ use c++
 + run only on linux
 + run only with epoll
-+ should only depand on std and common linux libs
-+ with admin apis(to send commond and get runing report)
++ should only depend on std and common linux libs
++ with admin APIs(to send command and get running report)
 + 60%-80% performance of nginx
-+ use little easy-understand code
-+ use c++ to reduce code
-+ do unit tests on windows and linux
-+ load domain configures from a db(or something can be updated from time to time) rather then fixed text files
-+ a tiny core and lots of system independent handlers(may be in lua) which can be tested by unit tests
++ 10-20k lines of code (while nginx has abort 100k lines)
++ load configures from a db(or something can be updated from time to time) rather then fixed text files
++ a lots of system independent handlers(may be in lua) which can be tested with unit tests tools
