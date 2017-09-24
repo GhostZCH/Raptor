@@ -1,4 +1,5 @@
 import time
+import traceback
 from events import TimerEventManager, NetEventManager
 
 from handlers import ServerHandler
@@ -36,6 +37,7 @@ class EventServer:
         self._handlers[handler.fileno()] = handler
 
     def remove_handler(self, fd):
+        self._net_manager.remove(fd)
         return self._handlers.pop(fd, None)
 
     def add_timer(self, timer_event):
@@ -61,8 +63,9 @@ class EventServer:
             self.add_handler(handler)
 
     def _handle(self, event_list):
-        for ev in event_list:
-            handler = self._handlers[ev.fd]
-            handler.handle(ev)
-
-
+        try:
+            for ev in event_list:
+                handler = self._handlers[ev.fd]
+                handler.handle(ev)
+        except:
+            traceback.print_exc()

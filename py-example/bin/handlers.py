@@ -1,16 +1,9 @@
 import socket
 from events import NetEvent, TimerEvent
+from http import Request, Response
 
-TEST_RESPONSE = 'HTTP/1.0 200 OK\r\n' \
-                'Content-Type: text/html\r\n' \
-                'Connection: keep-alive\r\n' \
-                'Content-Length: 13\r\n\r\n' \
-                'TEST_RESPONSE'
-
-
-class ClientCloseConnection(Exception):
-    def __init__(self):
-        pass
+from helper import helper
+from util import read, get_host_conf, ClientCloseConnection, ServerCloseConnection
 
 
 class HandlerBase:
@@ -29,50 +22,20 @@ class HandlerBase:
         self._server.remove_handler(self.fileno())
         self._connection.close()
 
+    def __del__(self):
+        self.close()
 
-class TcpHandler(HandlerBase):
+
+class ClientHandler(HandlerBase):
     def __init__(self, connection, server, conf):
         HandlerBase.__init__(self, connection, server, conf)
         self._connection.setblocking(False)
 
-    def read(self):
-        buf = ''
-        try:
-            while True:
-                tmp = self._connection.recv(4096)
-                if tmp:
-                    buf += tmp
-                else:
-                    raise ClientCloseConnection()
-
-        except socket.error as ex:
-            if not ex.errno == 11:
-                raise ex
-        return buf
-
-    def write(self, buf):
-        try:
-            while buf:
-                n = self._connection.send(buf)
-                buf = buf[n:]
-
-        except socket.error as ex:
-            if not ex.errno == 11:
-                raise ex
-
-        return buf
-
-
-class HttpHandler(TcpHandler):
-    _READ_TIMER_ID = 1
-    _WRITE_TIMER_ID = 2
-
-    def __init__(self, connection, server, conf):
-        TcpHandler.__init__(self, connection, server, conf)
-
-        self._status = 'READ'
-        self._read_buf = ''
-        self._send_buf = ''
+        self._helpers = []
+        self._current_helper_index = 0
+        self._ctx = {}
+        self._req = Request(self._connection, '')
+        self._res = Response(self._connection)
 
         event = NetEvent(self.fileno())
         event.read = True
@@ -82,43 +45,35 @@ class HttpHandler(TcpHandler):
 
     def handle(self, ev):
         try:
-            if ev.error:
-                raise ClientCloseConnection()
+            if not self._helpers:
+                if not ev.read:
+                    return
 
-            if ev.read and self._status == 'READ':
-                self._read()
-                return
+                self._req.buf += read(self._connection)
+                if not self._req.parse_headers():
+                    return
 
-            if ev.write and self._status == 'WRITE':
-                self._write()
-                return
-        except ClientCloseConnection:
+                self._init_helper(self._req.host)
+
+            h = self._helpers[self._current_helper_index]
+
+            if h.handle(ev):
+                self._current_helper_index += 1
+        except ServerCloseConnection or ClientCloseConnection:
             self.close()
 
-    def _get_content(self):
-        self._send_buf = TEST_RESPONSE
-
-    def _read(self):
-        self._read_buf += self.read()
-
-        if self._read_buf.find('\r\n\r\n') > 0:
-            self._status = 'WRITE'
-            self._get_content()
-            self._read_buf = ''
-
-    def _write(self):
-        self._send_buf = self.write(self._send_buf)
-
-        if self._send_buf:
+    def _init_helper(self, host):
+        conf = get_host_conf(host, self._conf)
+        if not conf:
+            self._helpers.append(self._get_helper('DefaultHelper'))
             return
 
-        self._status = 'READ'
-        return
+        helpers = conf['helpers'].split()
+        for name in helpers:
+            self._helpers.append(self._get_helper(name))
 
-
-class HttpUpstreamHandler(HandlerBase):
-    def __init__(self, connection, server, conf):
-        HandlerBase.__init__(self, connection, server, conf)
+    def _get_helper(self, name):
+        return helper(name, self._conf, self._ctx, self._req, self._res)
 
 
 class ServerHandler(HandlerBase):
@@ -144,7 +99,7 @@ class ServerHandler(HandlerBase):
         try:
             while True:
                 client_conn = self._connection.accept()[0]
-                h = HttpHandler(client_conn, self._server, self._conf)
+                h = ClientHandler(client_conn, self._server, self._conf)
                 self._server.add_handler(h)
         except Exception as ex:
             if not ex.errno == 11:
